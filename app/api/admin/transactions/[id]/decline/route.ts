@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { createAuditLog } from "@/lib/audit";
+import { sendTransferStatusEmail } from "@/lib/email";
 
 export async function POST(
   request: NextRequest,
@@ -70,6 +71,26 @@ export async function POST(
         },
       });
     });
+
+    // Send decline email (non-blocking)
+    const declinedTx = await prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        account: { include: { user: { select: { email: true, firstName: true } } } },
+        beneficiary: { select: { name: true } },
+      },
+    });
+    if (declinedTx) {
+      sendTransferStatusEmail({
+        to: declinedTx.account.user.email,
+        firstName: declinedTx.account.user.firstName,
+        status: "declined",
+        amount: declinedTx.amountCents,
+        reference: declinedTx.reference,
+        beneficiaryName: declinedTx.beneficiary?.name,
+        adminNote: adminNote || undefined,
+      }).catch((err) => console.error("[Email] Transfer decline email failed:", err));
+    }
 
     return NextResponse.json({ message: "Transaction declined." });
   } catch (error: unknown) {

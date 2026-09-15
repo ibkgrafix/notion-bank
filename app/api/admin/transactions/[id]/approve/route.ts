@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { createAuditLog } from "@/lib/audit";
+import { sendTransferStatusEmail } from "@/lib/email";
 
 export async function POST(
   _request: NextRequest,
@@ -88,6 +89,25 @@ export async function POST(
         },
       });
     });
+
+    // Send approval email (non-blocking) — fetch user info outside the transaction
+    const approvedTx = await prisma.transaction.findUnique({
+      where: { id },
+      include: {
+        account: { include: { user: { select: { email: true, firstName: true } } } },
+        beneficiary: { select: { name: true } },
+      },
+    });
+    if (approvedTx) {
+      sendTransferStatusEmail({
+        to: approvedTx.account.user.email,
+        firstName: approvedTx.account.user.firstName,
+        status: "approved",
+        amount: approvedTx.amountCents,
+        reference: approvedTx.reference,
+        beneficiaryName: approvedTx.beneficiary?.name,
+      }).catch((err) => console.error("[Email] Transfer approval email failed:", err));
+    }
 
     return NextResponse.json({ message: "Transaction approved and completed." });
   } catch (error: unknown) {

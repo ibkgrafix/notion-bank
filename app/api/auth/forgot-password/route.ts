@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { forgotPasswordSchema } from "@/lib/validations";
+import { sendPasswordResetEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,6 +54,13 @@ export async function POST(request: NextRequest) {
       console.log(`Reset URL: ${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`);
       console.log(`==========================\n`);
     }
+
+    // Send reset email
+    sendPasswordResetEmail({
+      to: user.email,
+      firstName: user.firstName,
+      resetToken: token,
+    }).catch((err) => console.error("[Email] Reset email failed:", err));
 
     return NextResponse.json({
       message:

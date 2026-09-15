@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { registerSchema } from "@/lib/validations";
 import { createSession } from "@/lib/auth";
 import { generateAccountNumber, ROUTING_NUMBER } from "@/lib/utils";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -124,6 +125,14 @@ export async function POST(request: NextRequest) {
       where: { id: result.user.id },
       data: { lastLoginAt: new Date() },
     });
+
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail({
+      to: result.user.email,
+      firstName: result.user.firstName,
+      checkingNumber: result.checkingAccount.accountNumber,
+      savingsNumber: result.savingsAccount.accountNumber,
+    }).catch((err) => console.error("[Email] Welcome email failed:", err));
 
     const response = NextResponse.json(
       {

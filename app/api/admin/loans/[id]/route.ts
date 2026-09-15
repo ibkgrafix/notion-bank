@@ -3,6 +3,7 @@ import { getSession, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { createAuditLog } from "@/lib/audit";
 import { notifyLoanDecision } from "@/lib/notifications";
+import { sendLoanDecisionEmail } from "@/lib/email";
 
 export async function PATCH(
   request: NextRequest,
@@ -36,7 +37,7 @@ export async function PATCH(
       const monthlyRate = rate / 100 / 12;
       const monthlyPayCents = Math.round(
         (approvedCents * monthlyRate * Math.pow(1 + monthlyRate, months)) /
-          (Math.pow(1 + monthlyRate, months) - 1)
+        (Math.pow(1 + monthlyRate, months) - 1)
       );
 
       await prisma.loan.update({
@@ -62,6 +63,20 @@ export async function PATCH(
         metadata: { approvedCents, interestRate: rate, termMonths: months, adminNote },
       });
 
+      // Send email
+      sendLoanDecisionEmail({
+        to: loan.user.email,
+        firstName: loan.user.firstName,
+        approved: true,
+        loanType: loan.loanType,
+        requestedAmount: loan.requestedCents,
+        approvedAmount: approvedCents,
+        interestRate: rate,
+        termMonths: months,
+        monthlyPayment: monthlyPayCents,
+        adminNote: adminNote || undefined,
+      }).catch((err) => console.error("[Email] Loan approval email failed:", err));
+
       return NextResponse.json({ message: "Loan approved successfully." });
     }
 
@@ -80,6 +95,16 @@ export async function PATCH(
         description: `Admin declined ${loan.loanType} loan application for ${loan.user.email}${adminNote ? `. Note: ${adminNote}` : ""}`,
         metadata: { adminNote },
       });
+
+      // Send email
+      sendLoanDecisionEmail({
+        to: loan.user.email,
+        firstName: loan.user.firstName,
+        approved: false,
+        loanType: loan.loanType,
+        requestedAmount: loan.requestedCents,
+        adminNote: adminNote || undefined,
+      }).catch((err) => console.error("[Email] Loan decline email failed:", err));
 
       return NextResponse.json({ message: "Loan application declined." });
     }
