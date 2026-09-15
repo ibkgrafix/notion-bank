@@ -1,0 +1,312 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+  PENDING
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+  PENDING
+}
+
+enum TransactionStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TransactionType {
+  TRANSFER
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+  CARD_PAYMENT
+  FEE
+  REFUND
+}
+
+enum CardType {
+  DEBIT
+  CREDIT
+  PREPAID
+}
+
+enum CardStatus {
+  ACTIVE
+  FROZEN
+  BLOCKED
+  EXPIRED
+  PENDING
+}
+
+enum LoanType {
+  PERSONAL
+  AUTO
+  MORTGAGE
+  STUDENT
+  BUSINESS
+  LINE_OF_CREDIT
+}
+
+enum LoanStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  ACTIVE
+  PAID_OFF
+  DEFAULTED
+}
+
+enum NotificationType {
+  TRANSACTION
+  ACCOUNT
+  SECURITY
+  LOAN
+  CARD
+  SYSTEM
+  TRANSFER
+}
+
+enum BeneficiaryStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model User {
+  id             String     @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String     @unique
+  phone          String?
+  dateOfBirth    DateTime?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  zipCode        String?
+  country        String     @default("US")
+  passwordHash   String
+  role           Role       @default(CUSTOMER)
+  status         UserStatus @default(ACTIVE)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  lastLoginAt    DateTime?
+  emailVerified  Boolean    @default(false)
+
+  accounts       Account[]
+  beneficiaries  Beneficiary[]
+  cards          Card[]
+  loans          Loan[]
+  notifications  Notification[]
+  sessions       UserSession[]
+  passwordResets PasswordReset[]
+  auditLogs      AuditLog[]      @relation("AdminAuditLogs")
+
+  @@map("users")
+}
+
+model Account {
+  id               String        @id @default(cuid())
+  userId           String
+  accountType      AccountType
+  accountNumber    String        @unique
+  routingNumber    String
+  balanceCents     Int           @default(0)
+  availableCents   Int           @default(0)
+  status           AccountStatus @default(ACTIVE)
+  openedAt         DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  interestRate     Float         @default(0)
+  nickname         String?
+
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions     Transaction[]
+  cards            Card[]
+
+  @@map("accounts")
+}
+
+model Transaction {
+  id              String            @id @default(cuid())
+  reference       String            @unique @default(cuid())
+  accountId       String
+  beneficiaryId   String?
+  type            TransactionType
+  amountCents     Int
+  feeCents        Int               @default(0)
+  currency        String            @default("USD")
+  description     String?
+  status          TransactionStatus @default(PENDING)
+  initiatedBy     String
+  approvedBy      String?
+  declinedBy      String?
+  adminNote       String?
+  metadata        Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  completedAt     DateTime?
+
+  account         Account           @relation(fields: [accountId], references: [id])
+  beneficiary     Beneficiary?      @relation(fields: [beneficiaryId], references: [id])
+
+  @@map("transactions")
+}
+
+model Beneficiary {
+  id            String            @id @default(cuid())
+  userId        String
+  name          String
+  accountNumber String
+  routingNumber String
+  bankName      String
+  nickname      String?
+  status        BeneficiaryStatus @default(ACTIVE)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+
+  @@map("beneficiaries")
+}
+
+model Card {
+  id              String     @id @default(cuid())
+  userId          String
+  accountId       String
+  cardType        CardType   @default(DEBIT)
+  lastFour        String
+  cardholderName  String
+  expirationMonth Int
+  expirationYear  Int
+  status          CardStatus @default(ACTIVE)
+  networkBrand    String     @default("VISA")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account         Account    @relation(fields: [accountId], references: [id])
+
+  @@map("cards")
+}
+
+model Loan {
+  id               String     @id @default(cuid())
+  userId           String
+  loanType         LoanType
+  requestedCents   Int
+  approvedCents    Int?
+  interestRate     Float?
+  termMonths       Int
+  monthlyPayCents  Int?
+  status           LoanStatus @default(PENDING)
+  purpose          String?
+  adminNote        String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("loans")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model UserSession {
+  id           String    @id @default(cuid())
+  userId       String
+  token        String    @unique
+  ipAddress    String?
+  userAgent    String?
+  success      Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  invalidatedAt DateTime?
+  lastActiveAt DateTime  @default(now())
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model PasswordReset {
+  id         String    @id @default(cuid())
+  userId     String
+  token      String    @unique
+  used       Boolean   @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  adminId     String
+  action      String
+  entityType  String
+  entityId    String?
+  description String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  admin       User     @relation("AdminAuditLogs", fields: [adminId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Biller {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  accountRef String
+  category  String   @default("OTHER")
+  createdAt DateTime @default(now())
+
+  @@map("billers")
+}
