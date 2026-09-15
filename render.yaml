@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: northvault-bank
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_BANK_NAME
+        value: NorthVault Bank
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: "NorthVault Bank <onboarding@resend.dev>"
+      - key: SESSION_DURATION_HOURS
+        value: "24"
